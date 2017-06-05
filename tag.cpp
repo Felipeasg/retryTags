@@ -42,7 +42,6 @@ Tag::~Tag()
 
 void Tag::createTag()
 {
-	m_oSync.lock();
     tag = plc_tag_create(attributeString.c_str());
 
     if(tag == PLC_TAG_NULL) {
@@ -54,7 +53,6 @@ void Tag::createTag()
     	DEBUG_PRINT("createTag: tag created.\n");
     }
 
-    m_oSync.unlock();
 }
 
 int Tag::checkResponse(int rc)
@@ -68,8 +66,6 @@ int Tag::checkResponse(int rc)
 
             DEBUG_PRINT("CheckResponse: closing tag\n");
             close();
-
-
 
 			int64_t currentTime = time_ms();
 			nextRetry = currentTime + retryMs;
@@ -92,7 +88,6 @@ Tag *Tag::create(string attributes)
 {
     Tag *tmp = new Tag(attributes);
 
-    m_oSync.lock();
     if(tmp->tag == PLC_TAG_NULL) {
 
         DEBUG_PRINT("ERROR TO CREATE TAG %s\n", tmp->attributeString.c_str());
@@ -101,58 +96,47 @@ Tag *Tag::create(string attributes)
     } else {
 
         DEBUG_PRINT("TAG CREATED: %s\n", tmp->attributeString.c_str());
-
+	
+	    m_oSync.lock();
         Tag::retryTags.push_back(tmp);
+	    m_oSync.unlock();
     }
-    m_oSync.unlock();
 
     return tmp;
 }
 
 int Tag::read(int timeout)
 {
-	int rc = PLCTAG_STATUS_OK;
-
     DEBUG_PRINT("read\n");
 
-    m_oSync.lock();
     if(tag != PLC_TAG_NULL) {
         DEBUG_PRINT("read: Tag is not null.\n");
         DEBUG_PRINT("read: call checkResponse.\n");
-        rc = checkResponse(plc_tag_read(tag, timeout));
+
+        return checkResponse(plc_tag_read(tag, timeout));
 
     } else {
         DEBUG_PRINT("Tag is null.\n");
 
-        rc = checkResponse(PLCTAG_ERR_NULL_PTR);
+        return checkResponse(PLCTAG_ERR_NULL_PTR);
     }
-
-    m_oSync.unlock();
-
-    return rc;
 }
 
 int Tag::write(int timeout)
 {
-
     if(tag != PLC_TAG_NULL) {
         DEBUG_PRINT("Writing the tag!\n");
-        m_oSync.lock();
-        int rc = plc_tag_write(tag, timeout);
-        return checkResponse(rc);
-        m_oSync.unlock();
+
+        return checkResponse(plc_tag_write(tag, timeout));
     } else {
         return checkResponse(PLCTAG_ERR_NULL_PTR);
     }
-
 }
 
 int Tag::status()
 {
     if(tag != PLC_TAG_NULL) {
-    	m_oSync.lock();
         return checkResponse(plc_tag_status(tag));
-        m_oSync.unlock();
     } else {
         return checkResponse(PLCTAG_ERR_NULL_PTR);
     }
@@ -161,14 +145,10 @@ int Tag::status()
 int Tag::size()
 {
     if(tag != PLC_TAG_NULL) {
-    	m_oSync.lock();
-    	int rc = plc_tag_get_size(tag);
-        return checkResponse(rc);
-        m_oSync.unlock();
+        return checkResponse(plc_tag_get_size(tag));
     } else {
         return checkResponse(PLCTAG_ERR_NULL_PTR);
     }
-
 }
 
 void Tag::setRetryTime(int newRetryMS)
@@ -180,92 +160,57 @@ int Tag::close()
 {
     int rc = PLCTAG_ERR_NULL_PTR;
 
-    m_oSync.lock();
-    if(tag != PLC_TAG_NULL)
+    if(tag != PLC_TAG_NULL) {
         rc = plc_tag_destroy(tag);
+	}
 
     if(rc != PLCTAG_STATUS_OK) {
         DEBUG_PRINT("Fail to destroy!\n");
     }
 
     tag = PLC_TAG_NULL;
-    m_oSync.unlock();
-
 
     return rc;
 }
 
 uint32_t Tag::getUInt32(int offset)
 {
-	m_oSync.lock();
-	uint32_t retVal = plc_tag_get_uint32(tag, offset);
-	m_oSync.unlock();
-
-    return retVal;
+	return plc_tag_get_uint32(tag, offset);
 }
 
 int Tag::setUint32(int offset, uint32_t val)
 {
-	int rc = PLCTAG_STATUS_OK;
-
-	m_oSync.lock();
     if(tag != PLC_TAG_NULL) {
-
-    	rc = plc_tag_set_uint32(tag, offset, val);
-
-
+    	return plc_tag_set_uint32(tag, offset, val);
     } else {
-        rc = checkResponse(PLCTAG_ERR_NULL_PTR);
+        return checkResponse(PLCTAG_ERR_NULL_PTR);
     }
-
-    m_oSync.unlock();
-
-    return rc;
 }
 
 uint8_t Tag::getUInt8(int offset)
 {
-	m_oSync.lock();
-	uint8_t retVal = plc_tag_get_uint8(tag, offset);
-	m_oSync.unlock();
-
-    return retVal;
+	return plc_tag_get_uint8(tag, offset);
 }
 
 int Tag::setUint8(int offset, uint8_t val)
 {
-	int rc = PLCTAG_STATUS_OK;
 
-	m_oSync.lock();
     if(tag != PLC_TAG_NULL) {
-
-    	rc = plc_tag_set_uint8(tag, offset, val);
-
-
+		return plc_tag_set_uint8(tag, offset, val);
     } else {
-        rc = checkResponse(PLCTAG_ERR_NULL_PTR);
+		return checkResponse(PLCTAG_ERR_NULL_PTR);
     }
-    m_oSync.unlock();
-
-    return rc;
 }
 
 float Tag::getFloat32(int offset)
 {
-	m_oSync.lock();
-	float retVal = plc_tag_get_float32(tag, offset);
-	m_oSync.unlock();
-
-    return retVal;
+	return plc_tag_get_float32(tag, offset);
 }
 
 int Tag::setFloat32(int offset, float val)
 {
     if(tag != PLC_TAG_NULL) {
-    	m_oSync.lock();
-    	int rc = plc_tag_set_float32(tag, offset, val);
-    	m_oSync.unlock();
-        return rc;
+    	return plc_tag_set_float32(tag, offset, val);
     } else {
         return checkResponse(PLCTAG_ERR_NULL_PTR);
     }
@@ -324,6 +269,7 @@ void Tag::run()
 #endif
     }
 
+	/* If the thread is finished */
     Tag::init = false;
 
     vector<Tag*>::iterator itEnd = Tag::retryTags.end();
